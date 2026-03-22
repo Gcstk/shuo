@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>shuo browser agent</title>
+  <link rel="stylesheet" href="/static/browser_agent.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero-panel">
+      <p class="eyebrow">Browser Transport</p>
+      <h1>Speak to the agent without Twilio.</h1>
+      <p class="lede">Live microphone streaming, live subtitles, and streamed playback over one browser WebSocket.</p>
+      <div class="controls">
+        <button id="connectBtn" class="primary">Connect</button>
+        <button id="disconnectBtn" class="ghost" disabled>Disconnect</button>
+      </div>
+      <div class="status-grid">
+        <div>
+          <span class="label">Socket</span>
+          <strong id="socketState">idle</strong>
+        </div>
+        <div>
+          <span class="label">Phase</span>
+          <strong id="phaseState">offline</strong>
+        </div>
+        <div>
+          <span class="label">Mic</span>
+          <strong id="micState">off</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="transcript-panel">
+      <header>
+        <div>
+          <p class="eyebrow">Live Transcript</p>
+          <h2>Conversation feed</h2>
+        </div>
+        <button id="clearBtn" class="ghost">Clear text</button>
+      </header>
+
+      <div class="live-strip">
+        <div class="live-card user-live">
+          <span class="label">User live</span>
+          <p id="userLive" class="live-text">...</p>
+        </div>
+        <div class="live-card assistant-live">
+          <span class="label">Assistant live</span>
+          <p id="assistantLive" class="live-text">...</p>
+        </div>
+      </div>
+
+      <div id="transcriptList" class="transcript-list"></div>
+    </section>
+  </main>
+
+  <script type="module" src="/static/browser_agent.js"></script>
+</body>
+</html>

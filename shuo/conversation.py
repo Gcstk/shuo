@@ -1,54 +1,54 @@
-"""
-The main event loop for shuo.
+"""Shared conversation loop for Twilio and browser transports."""
 
-This is the explicit, readable loop that drives the entire system:
+from __future__ import annotations
 
-    while connected:
-        event = receive()                               # I/O (from queue)
-        state, actions = process_event(state, event)    # PURE
-        for action in actions:
-            dispatch(action)                            # I/O
-
-Events come from:
-- Twilio WebSocket (audio packets)
-- Deepgram Flux (turn events)
-- Agent (playback complete)
-"""
-
-import json
 import asyncio
+import os
 from typing import Optional
 
 from fastapi import WebSocket
 
-from .types import (
-    AppState,
-    Event, StreamStartEvent, StreamStopEvent,
-    FluxStartOfTurnEvent, FluxEndOfTurnEvent, AgentTurnDoneEvent,
-    FeedFluxAction, StartAgentTurnAction, ResetAgentTurnAction,
-)
-from .state import process_event
-from .services.flux import FluxService
-from .services.tts_pool import TTSPool
-from .services.twilio_client import parse_twilio_message
 from .agent import Agent
-from .tracer import Tracer
 from .log import Logger, get_logger
+from .services.flux import FluxService, FluxTurnInfo
+from .services.tts_pool import TTSPool
+from .state import process_event
+from .transports import BaseTransport, TwilioTransport
+from .tracer import Tracer
+from .types import (
+    AgentTurnDoneEvent,
+    AppState,
+    Event,
+    FeedFluxAction,
+    FluxEndOfTurnEvent,
+    FluxStartOfTurnEvent,
+    ResetAgentTurnAction,
+    StartAgentTurnAction,
+    StreamStartEvent,
+    StreamStopEvent,
+)
 
 logger = get_logger("shuo.conversation")
 
 
-async def run_conversation_over_twilio(websocket: WebSocket) -> None:
-    """
-    Main event loop for a single call.
+async def _noop_text(_text: str, _final: bool) -> None:
+    return None
 
-    1. Create shared event queue
-    2. Create Flux service (always-on STT + turn detection)
-    3. Start Twilio reader
-    4. On StreamStart, create Agent
-    5. Process events through pure state machine
-    6. Dispatch actions inline
-    """
+
+def _build_turn_service(**callbacks):
+    provider = os.getenv("TURN_PROVIDER", "flux").strip().lower()
+    if provider in {"duplug", "soulx", "soulx-duplug"}:
+        from .services.duplug import DuplugService
+
+        logger.info("Using SoulX-Duplug turn service")
+        return DuplugService(**callbacks)
+    if provider in {"flux", "deepgram"}:
+        return FluxService(**callbacks)
+    raise ValueError(f"Unsupported TURN_PROVIDER: {provider}")
+
+
+async def run_conversation_with_transport(transport: BaseTransport) -> None:
+    """Run a single bidirectional conversation over an arbitrary transport."""
     event_log = Logger(verbose=False)
     event_queue: asyncio.Queue[Event] = asyncio.Queue()
     tracer = Tracer()
@@ -56,89 +56,152 @@ async def run_conversation_over_twilio(websocket: WebSocket) -> None:
     agent: Optional[Agent] = None
     tts_pool = TTSPool(pool_size=1, ttl=8.0)
     stream_sid: Optional[str] = None
-
-    # ── Flux Callbacks (push events to queue) ───────────────────────
+    # Deepgram 的 turn_index 和本地 tracer turn_id 不是同一个概念，
+    # 这里做一次映射，保证 ASR 和下游响应链路落在同一张图上。
+    flux_trace_turns: dict[int, int] = {}
+    pending_agent_trace_turn: Optional[int] = None
 
     async def on_flux_end_of_turn(transcript: str) -> None:
+        nonlocal pending_agent_trace_turn
+        # EndOfTurn 到来时，下一步启动 Agent 的就是这轮用户 turn。
+        pending_agent_trace_turn = _latest_trace_turn()
         await event_queue.put(FluxEndOfTurnEvent(transcript=transcript))
 
     async def on_flux_start_of_turn() -> None:
         await event_queue.put(FluxStartOfTurnEvent())
 
-    # ── Create Flux Service ─────────────────────────────────────────
+    async def on_flux_interim(transcript: str) -> None:
+        if transport.supports_live_text:
+            await transport.send_transcript("user", transcript, False)
 
-    flux = FluxService(
+    def _latest_trace_turn() -> Optional[int]:
+        if not flux_trace_turns:
+            return None
+        return max(flux_trace_turns.values())
+
+    async def on_flux_turn_info(info: FluxTurnInfo) -> None:
+        if info.turn_index is None:
+            return
+
+        trace_turn = flux_trace_turns.get(info.turn_index)
+        if trace_turn is None:
+            # Flux 的 audio_window_end 表示这轮用户音频已经覆盖到哪里。
+            # 用“收到事件的本地时间 - window_end”回推近似的用户开口时刻。
+            estimated_turn_start = max(
+                info.received_at - max(info.audio_window_end, 0.0),
+                0.0,
+            )
+            trace_turn = tracer.begin_turn_at(
+                transcript=info.transcript,
+                start_time=estimated_turn_start,
+            )
+            flux_trace_turns[info.turn_index] = trace_turn
+            tracer.mark_at(trace_turn, "user_audio_first_frame", estimated_turn_start)
+
+        if info.transcript:
+            tracer.update_turn_transcript(trace_turn, info.transcript)
+
+        if info.event == "StartOfTurn" and not tracer.has_marker(trace_turn, "flux_start_of_turn"):
+            tracer.mark_at(trace_turn, "flux_start_of_turn", info.received_at)
+
+        if (
+            info.transcript
+            and info.event in {"StartOfTurn", "Update", "TurnResumed", "EagerEndOfTurn"}
+            and not tracer.has_marker(trace_turn, "asr_first_interim")
+        ):
+            # 首次拿到非空 transcript 时，记为“ASR 首字/首段可见”时间点。
+            tracer.mark_at(trace_turn, "asr_first_interim", info.received_at)
+
+        if info.event == "EndOfTurn":
+            turn_start = tracer.get_turn_start(trace_turn) or info.received_at
+            # audio_window_end 对应这轮用户最后一个被纳入 turn 的音频位置，
+            # 用它来估算“用户最后说话时刻”。
+            user_last_audio_time = turn_start + max(info.audio_window_end, 0.0)
+            if not tracer.has_marker(trace_turn, "user_last_audio_frame"):
+                tracer.mark_at(trace_turn, "user_last_audio_frame", user_last_audio_time)
+            if not tracer.has_marker(trace_turn, "flux_end_of_turn"):
+                tracer.mark_at(trace_turn, "flux_end_of_turn", info.received_at)
+            if not tracer.has_marker(trace_turn, "asr_final_transcript"):
+                tracer.mark_at(trace_turn, "asr_final_transcript", info.received_at)
+
+    flux = _build_turn_service(
         on_end_of_turn=on_flux_end_of_turn,
         on_start_of_turn=on_flux_start_of_turn,
+        on_interim=on_flux_interim if transport.supports_live_text else None,
+        on_turn_info=on_flux_turn_info,
     )
 
-    # ── Twilio WebSocket Reader ─────────────────────────────────────
-
-    async def read_twilio() -> None:
-        """Background task to read from Twilio and push to event queue."""
+    async def read_transport() -> None:
         try:
             while True:
-                raw = await websocket.receive_text()
-                data = json.loads(raw)
-                event = parse_twilio_message(data)
-                if event:
-                    await event_queue.put(event)
-                    if isinstance(event, StreamStopEvent):
-                        break
-        except Exception as e:
-            event_log.error("Twilio reader", e)
+                event = await transport.receive_event()
+                if event is None:
+                    continue
+                await event_queue.put(event)
+                if isinstance(event, StreamStopEvent):
+                    break
+        except Exception as exc:
+            event_log.error("Transport reader", exc)
             await event_queue.put(StreamStopEvent())
 
-    # ── Initialize ──────────────────────────────────────────────────
-
     state = AppState()
-    reader_task = asyncio.create_task(read_twilio())
+    reader_task = asyncio.create_task(read_transport())
 
     try:
         while True:
-            # ─── RECEIVE ────────────────────────────────────────────
             event = await event_queue.get()
-
             event_log.event(event)
 
-            # Initialize services on stream start
             if isinstance(event, StreamStartEvent):
                 stream_sid = event.stream_sid
-                await flux.start()
+                await flux.start(
+                    encoding=transport.flux_encoding,
+                    sample_rate=transport.flux_sample_rate,
+                )
                 await tts_pool.start()
                 agent = Agent(
-                    websocket=websocket,
-                    stream_sid=event.stream_sid,
+                    send_audio=transport.send_audio_chunk,
+                    clear_audio=transport.clear_audio,
                     on_done=lambda: event_queue.put_nowait(AgentTurnDoneEvent()),
                     tts_pool=tts_pool,
                     tracer=tracer,
+                    on_text=(
+                        (lambda text, final: transport.send_transcript("assistant", text, final))
+                        if transport.supports_live_text
+                        else _noop_text
+                    ),
                 )
 
-            # ─── UPDATE (pure) ──────────────────────────────────────
+            if transport.supports_live_text and isinstance(event, FluxEndOfTurnEvent):
+                await transport.send_transcript("user", event.transcript, True)
+
             old_phase = state.phase
             state, actions = process_event(state, event)
             event_log.transition(old_phase, state.phase)
 
-            # ─── DISPATCH (side effects) ────────────────────────────
+            if isinstance(event, StreamStartEvent) or old_phase != state.phase:
+                await transport.send_phase(state.phase)
+
             for action in actions:
                 event_log.action(action)
                 if isinstance(action, FeedFluxAction):
                     await flux.send(action.audio_bytes)
-
                 elif isinstance(action, StartAgentTurnAction):
                     if agent:
-                        await agent.start_turn(action.transcript)
-
+                        await agent.start_turn(
+                            action.transcript,
+                            trace_turn=pending_agent_trace_turn,
+                        )
+                        pending_agent_trace_turn = None
                 elif isinstance(action, ResetAgentTurnAction):
                     if agent:
                         await agent.cancel_turn()
 
-            # ─── EXIT CHECK ─────────────────────────────────────────
             if isinstance(event, StreamStopEvent):
                 break
 
-    except Exception as e:
-        event_log.error("Call loop", e)
+    except Exception as exc:
+        event_log.error("Call loop", exc)
         raise
 
     finally:
@@ -153,9 +216,13 @@ async def run_conversation_over_twilio(websocket: WebSocket) -> None:
 
         await tts_pool.stop()
         await flux.stop()
+        await transport.close()
 
-        # Save trace
         call_id = stream_sid or "unknown"
         tracer.save(call_id)
-
         Logger.websocket_disconnected()
+
+
+async def run_conversation_over_twilio(websocket: WebSocket) -> None:
+    """Backward-compatible entrypoint for Twilio media streams."""
+    await run_conversation_with_transport(TwilioTransport(websocket))

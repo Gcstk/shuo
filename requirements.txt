@@ -10,4 +10,4 @@ elevenlabs>=1.0.0
 matplotlib>=3.7.0
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-# audioop-lts>=0.2.1  # Only needed for Python 3.13+ (audioop is built-in for earlier versions)
+audioop-lts>=0.2.1; python_version >= "3.13"

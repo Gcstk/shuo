@@ -1,15 +1,17 @@
 """
-Audio player for streaming audio to Twilio.
+Transport-neutral audio player.
 
 Manages its own independent playback loop that drips audio
 chunks at the correct rate, regardless of other activity.
+
+这个模块是下行音频的“节拍器”：
+- 上游可以突发地产生很多 chunk
+- Player 按约 20ms 间隔稳定发送给下游 transport
+- 遇到打断时可立即 clear，清掉 transport 侧缓冲
 """
 
-import json
 import asyncio
-from typing import List, Optional, Callable
-
-from fastapi import WebSocket
+from typing import Awaitable, Callable, List, Optional
 
 from ..log import ServiceLogger
 
@@ -18,23 +20,23 @@ log = ServiceLogger("Player")
 
 class AudioPlayer:
     """
-    Streams audio to Twilio at the correct rate.
+    按正确节奏把音频流发送到 transport。
     
-    Features:
-    - Independent playback loop (not affected by incoming messages)
-    - Can be topped up with audio chunks dynamically (for streaming TTS)
-    - Instant stop and clear on interrupt
-    - Callback when playback completes
+    特性：
+    - 独立播放循环，不阻塞主事件循环
+    - 支持动态追加 chunk（适配流式 TTS）
+    - 支持即时 stop + clear（抢话打断）
+    - 播放完毕回调通知上层
     """
     
     def __init__(
         self,
-        websocket: WebSocket,
-        stream_sid: str,
+        send_audio: Callable[[str], Awaitable[None]],
+        send_clear: Callable[[], Awaitable[None]],
         on_done: Optional[Callable[[], None]] = None,
     ):
-        self._websocket = websocket
-        self._stream_sid = stream_sid
+        self._send_audio_cb = send_audio
+        self._send_clear_cb = send_clear
         self._on_done = on_done
         
         self._chunks: List[str] = []
@@ -60,7 +62,7 @@ class AudioPlayer:
         self._task = asyncio.create_task(self._playback_loop())
     
     async def send_chunk(self, chunk: str) -> None:
-        """Add an audio chunk to the playback queue."""
+        """追加一段待播放音频。"""
         if not self._running:
             await self.start()
         
@@ -83,7 +85,11 @@ class AudioPlayer:
         self._task = asyncio.create_task(self._playback_loop())
     
     async def stop_and_clear(self) -> None:
-        """Stop playback immediately and clear Twilio's buffer."""
+        """
+        立即停止播放并通知 Twilio 清缓冲。
+
+        这是 barge-in 体验的关键动作：防止旧回复继续播出。
+        """
         self._running = False
         
         if self._task and not self._task.done():
@@ -109,7 +115,13 @@ class AudioPlayer:
                 pass
     
     async def _playback_loop(self) -> None:
-        """Independent loop that drips audio at ~20ms intervals."""
+        """
+        独立播放循环，按 ~20ms 节奏 drip 发送。
+
+        为什么要定速：
+        - 下游 transport 通常期望稳定媒体节奏
+        - 可避免突发发送造成抖动或缓冲异常
+        """
         try:
             while self._running:
                 if self._index < len(self._chunks):
@@ -135,20 +147,9 @@ class AudioPlayer:
             self._running = False
     
     async def _send_audio(self, payload: str) -> None:
-        """Send a single audio chunk to Twilio."""
-        message = {
-            "event": "media",
-            "streamSid": self._stream_sid,
-            "media": {
-                "payload": payload
-            }
-        }
-        await self._websocket.send_text(json.dumps(message))
-    
+        """向下游 transport 发送一个音频 chunk。"""
+        await self._send_audio_cb(payload)
+
     async def _send_clear(self) -> None:
-        """Send clear message to Twilio to flush audio buffer."""
-        message = {
-            "event": "clear",
-            "streamSid": self._stream_sid
-        }
-        await self._websocket.send_text(json.dumps(message))
+        """发送 clear 事件，让下游 transport 丢弃尚未播放的缓冲音频。"""
+        await self._send_clear_cb()

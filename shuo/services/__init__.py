@@ -1,20 +1,9 @@
-"""
-External services for the shuo voice agent pipeline.
+"""Lazy exports for external service adapters."""
 
-Deepgram Flux  -- STT + turn detection
-OpenAI         -- LLM streaming
-ElevenLabs     -- TTS streaming + connection pool
-Twilio         -- outbound calls + audio playback
-"""
-
-from .flux import FluxService
-from .llm import LLMService
-from .tts import TTSService
-from .tts_pool import TTSPool
-from .player import AudioPlayer
-from .twilio_client import make_outbound_call
+from importlib import import_module
 
 __all__ = [
+    "DuplugService",
     "FluxService",
     "LLMService",
     "TTSService",
@@ -22,3 +11,20 @@ __all__ = [
     "AudioPlayer",
     "make_outbound_call",
 ]
+
+_MODULE_MAP = {
+    "DuplugService": ".duplug",
+    "FluxService": ".flux",
+    "LLMService": ".llm",
+    "TTSService": ".tts",
+    "TTSPool": ".tts_pool",
+    "AudioPlayer": ".player",
+    "make_outbound_call": ".twilio_client",
+}
+
+
+def __getattr__(name: str):
+    if name not in _MODULE_MAP:
+        raise AttributeError(name)
+    module = import_module(_MODULE_MAP[name], __name__)
+    return getattr(module, name)

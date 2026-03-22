@@ -13,6 +13,11 @@ Usage:
     # tts is ready to use immediately (if warm) or after a fresh connect
 
     await pool.stop()
+
+为什么需要池化：
+1. TTS 建连成本通常高于发一次文本 chunk
+2. 若每轮都临时建连，首音频延迟会明显上升
+3. 预热连接可显著降低“开始说话”等待时间
 """
 
 import asyncio
@@ -44,12 +49,13 @@ class _Entry:
 
 class TTSPool:
     """
-    Connection pool for ElevenLabs TTS WebSockets.
+    ElevenLabs TTS WebSocket 连接池。
 
-    - Pre-connects `pool_size` connections at startup
-    - Dispenses warm connections via get() with callback rebinding
-    - Evicts connections older than `ttl` seconds
-    - Auto-refills in the background after dispensing or eviction
+    行为：
+    - 启动后预热 pool_size 条连接
+    - get() 优先发放 warm 连接（并重绑回调）
+    - 超过 ttl 的空闲连接会淘汰
+    - 淘汰/发放后后台自动补齐
     """
 
     def __init__(self, pool_size: int = 1, ttl: float = 8.0):
@@ -67,7 +73,7 @@ class TTSPool:
         return len(self._ready)
 
     async def start(self) -> None:
-        """Start the pool and begin pre-connecting."""
+        """启动连接池后台补池任务。"""
         if self._running:
             return
 
@@ -80,12 +86,12 @@ class TTSPool:
         on_done: Callable[[], Awaitable[None]],
     ) -> TTSService:
         """
-        Get a connected TTS service with the given callbacks.
+        获取可用 TTS 连接，并绑定本轮回调。
 
-        Returns a warm connection if available (and not stale),
-        otherwise blocks to create a fresh one.
+        优先返回 warm 且未过期连接；
+        如果池空或都过期，则阻塞创建新连接。
         """
-        # Try to grab a warm, non-stale connection
+        # 先尝试发放 warm 连接，减少首音频等待。
         while self._ready:
             entry = self._ready.pop(0)
             age = time.monotonic() - entry.created_at
@@ -101,7 +107,7 @@ class TTSPool:
                 log.info(f"Discarded stale connection (idle {age_ms}ms)")
                 await entry.tts.cancel()
 
-        # No warm connections available -- create fresh (blocking)
+        # 没有可用 warm 连接时，降级为同步建连。
         log.info("Pool empty, connecting fresh...")
         tts = TTSService(on_audio=on_audio, on_done=on_done)
         await tts.start()
@@ -130,7 +136,11 @@ class TTSPool:
         self._fill_event.set()
 
     async def _fill_loop(self) -> None:
-        """Background loop that keeps the pool at target size."""
+        """
+        后台补池循环：负责“淘汰旧连接 + 补齐目标容量”。
+
+        即使没有外部触发，也会按 ttl/2 周期做健康刷新。
+        """
         try:
             while self._running:
                 # Evict stale entries

@@ -7,6 +7,13 @@ Endpoints:
 - WebSocket /ws - Media stream endpoint
 - GET /trace/latest - Returns the most recent call trace as JSON
 - GET /bench/ttft - Benchmark TTFT across OpenAI models
+
+在主链路里，server.py 主要做两件事：
+1. 暴露给 Twilio 的控制面接口（/twiml）与媒体面入口（/ws）
+2. 承担通话生命周期的“门面层”职责（健康检查、外呼触发等）
+
+注意：
+- /bench/ttft 是观测工具接口，不参与实时通话主链路。
 """
 
 import json
@@ -19,16 +26,20 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, WebSocket, Response, Query
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 
-from .conversation import run_conversation_over_twilio
+from .conversation import run_conversation_over_twilio, run_conversation_with_transport
 from .services.twilio_client import make_outbound_call
-from .log import get_logger
+from .log import Logger, get_logger
+from .transports import BrowserTransport
 
 logger = get_logger("shuo.server")
 
 app = FastAPI(title="shuo", docs_url=None, redoc_url=None)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ── Graceful shutdown / connection draining ───────────────────────────
 _draining = False          # Set True on SIGTERM — reject new calls
@@ -42,10 +53,16 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/web")
+async def browser_demo():
+    """Serve the browser mic/speaker demo."""
+    return FileResponse(STATIC_DIR / "browser_agent.html")
+
+
 @app.api_route("/twiml", methods=["GET", "POST"])
 async def twiml():
     """
-    Return TwiML instructing Twilio to connect a WebSocket stream.
+    返回 TwiML，告诉 Twilio “下一步去连哪个 WebSocket”。
     
     Twilio calls this URL when the call is answered.
     During graceful shutdown, rejects new calls so they don't get cut off.
@@ -60,10 +77,12 @@ async def twiml():
 </Response>"""
         return Response(content=reject_twiml, media_type="application/xml")
 
+    # Twilio 只能访问公网地址，所以本地开发通常用 ngrok 暴露。
     public_url = os.getenv("TWILIO_PUBLIC_URL", "")
     ws_url = public_url.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_url}/ws"
     
+    # track=inbound_track：只接收来电方音频上行到本服务。
     twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect record="record-from-answer-dual">
@@ -76,7 +95,7 @@ async def twiml():
 
 @app.get("/trace/latest")
 async def latest_trace():
-    """Return the most recent call trace as JSON."""
+    """返回最近一通电话的 trace（用于排查延迟/中断）。"""
     trace_dir = Path("/tmp/shuo")
     if not trace_dir.exists():
         return JSONResponse({"error": "No traces found"}, status_code=404)
@@ -92,7 +111,7 @@ async def latest_trace():
 @app.get("/call/{phone_number:path}")
 async def trigger_call(phone_number: str):
     """
-    Initiate an outbound call.
+    触发外呼（调试/演示入口）。
 
     Usage:
         curl https://your-server/call/+1234567890
@@ -137,7 +156,13 @@ BENCH_MESSAGES = [
 
 
 def _make_clients() -> dict:
-    """Build provider → AsyncOpenAI client map."""
+    """
+    构建 provider -> OpenAI 兼容客户端映射。
+
+    说明：
+    - openai 使用官方端点
+    - groq 通过 OpenAI-compatible base_url 访问
+    """
     clients = {}
     oai_key = os.getenv("OPENAI_API_KEY", "")
     if oai_key:
@@ -155,8 +180,7 @@ async def _measure_ttft(client: AsyncOpenAI, model: str) -> float:
     """
     Single TTFT measurement in milliseconds.
 
-    Opens a streaming completion, records time-to-first-content-token,
-    then closes the stream immediately.
+    打开流式 completion，记录首个内容 token 到达时间后立即关闭。
     """
     # GPT-5+ uses max_completion_tokens; older models use max_tokens
     is_new = model.startswith(("gpt-5", "o1", "o3", "o4"))
@@ -286,13 +310,17 @@ async def bench_ttft(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
-    WebSocket endpoint for Twilio Media Streams.
+    Twilio Media Streams 的双向 WebSocket 入口。
     
-    Handles the bidirectional audio stream for a single call.
-    Tracks active connections for graceful shutdown draining.
+    这里承接实时双工音频：
+    - 上行：Twilio -> conversation -> Flux
+    - 下行：Agent(TTS/Player) -> Twilio
+
+    同时维护 active_calls，供 SIGTERM 优雅排空使用。
     """
     global _active_calls
 
+    # Twilio 连接建立后，一通电话对应一个 run_conversation_over_twilio。
     await websocket.accept()
     _active_calls += 1
     logger.info(f"Call connected  (active: {_active_calls})")
@@ -304,5 +332,29 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         _active_calls -= 1
         logger.info(f"Call ended  (active: {_active_calls})")
+        if _draining and _active_calls <= 0:
+            _drain_event.set()
+
+
+@app.websocket("/ws/browser")
+async def browser_websocket_endpoint(websocket: WebSocket):
+    """Browser realtime voice endpoint."""
+    global _active_calls
+
+    await websocket.accept()
+    Logger.websocket_connected()
+    _active_calls += 1
+    logger.info(f"Browser session connected  (active: {_active_calls})")
+
+    transport = BrowserTransport(websocket)
+    await transport.send_ready()
+
+    try:
+        await run_conversation_with_transport(transport)
+    except Exception as e:
+        logger.error(f"Browser WebSocket error: {e}")
+    finally:
+        _active_calls -= 1
+        logger.info(f"Browser session ended  (active: {_active_calls})")
         if _draining and _active_calls <= 0:
             _drain_event.set()

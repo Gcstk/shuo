@@ -3,11 +3,22 @@
 shuo - Voice Agent Framework
 
 Usage:
-    python main.py                  # server-only mode (inbound calls)
+    python main.py                  # browser/server mode
     python main.py +1234567890      # outbound call mode
 
-Server-only mode starts the server and waits for inbound calls.
+Server-only mode starts the server and serves the browser demo.
 Outbound mode additionally initiates a call to the specified number.
+
+启动时序（教学版）：
+1. 读取 .env 并校验外部服务密钥
+2. 启动 FastAPI（负责 Twilio 回调与 WebSocket）
+3. 可选发起 Twilio 外呼
+4. 主线程驻留，等待通话生命周期结束
+
+进程结束时，SIGTERM 会触发优雅排空：
+- 拒绝新通话
+- 等待活跃通话自然结束（最多 DRAIN_TIMEOUT）
+- 再退出服务
 """
 
 import os
@@ -32,23 +43,48 @@ setup_logging()
 logger = get_logger("shuo")
 
 
-def check_environment() -> bool:
-    """Check that all required environment variables are set."""
-    required_vars = [
-        "TWILIO_ACCOUNT_SID",
-        "TWILIO_AUTH_TOKEN",
-        "TWILIO_PHONE_NUMBER",
-        "TWILIO_PUBLIC_URL",
-        "DEEPGRAM_API_KEY",
-        "OPENAI_API_KEY",
-        "ELEVENLABS_API_KEY",
-    ]
+def check_environment(require_twilio: bool = False) -> bool:
+    """
+    校验运行所需环境变量。
+
+    注意：
+    - 浏览器/纯服务模式不强依赖 Twilio
+    - 只有显式外呼时才校验 Twilio 相关变量
+    """
+    required_vars = ["DEEPGRAM_API_KEY"]
+    tts_provider = os.getenv("TTS_PROVIDER", "elevenlabs").strip().lower()
+
+    if tts_provider == "qwen":
+        required_vars.append("DASHSCOPE_API_KEY")
+    else:
+        required_vars.append("ELEVENLABS_API_KEY")
+
+    if require_twilio:
+        required_vars.extend([
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_PHONE_NUMBER",
+            "TWILIO_PUBLIC_URL",
+        ])
     
     missing = [var for var in required_vars if not os.getenv(var)]
     
     if missing:
         logger.error(f"Missing environment variables: {', '.join(missing)}")
         return False
+
+    llm_env_vars = [
+        "LLM_API_KEY",
+        "VLLM_API_KEY",
+        "LLM_BASE_URL",
+        "VLLM_BASE_URL",
+        "GROQ_API_KEY",
+        "OPENAI_API_KEY",
+    ]
+    if not any(os.getenv(var) for var in llm_env_vars):
+        logger.warning(
+            "No explicit LLM environment configured; LLMService will use its internal defaults"
+        )
     
     return True
 
@@ -60,7 +96,7 @@ _uvicorn_server: uvicorn.Server = None
 
 
 def start_server(port: int) -> None:
-    """Start the FastAPI server."""
+    """启动 FastAPI 服务（在后台线程运行）。"""
     global _uvicorn_server
     config = uvicorn.Config(
         app,
@@ -73,7 +109,7 @@ def start_server(port: int) -> None:
 
 
 def main():
-    """Main entry point."""
+    """程序入口：启动服务并可选发起外呼。"""
     phone_number = None
 
     if len(sys.argv) >= 2:
@@ -82,15 +118,18 @@ def main():
             print("Error: Phone number must start with +")
             sys.exit(1)
 
-    # Check environment
-    if not check_environment():
+    # 先校验外部依赖配置，避免半启动状态。
+    if not check_environment(require_twilio=bool(phone_number)):
         sys.exit(1)
     
     # Get port from environment
     port = int(os.getenv("PORT", "3040"))
     public_url = os.getenv("TWILIO_PUBLIC_URL", "")
+    ready_url = public_url or f"http://localhost:{port}/web"
     
-    # Start server in background thread
+    # 服务线程与主线程分离：
+    # - 服务线程跑 uvicorn
+    # - 主线程保留给信号处理与外呼控制
     Logger.server_starting(port)
     server_thread = threading.Thread(
         target=start_server,
@@ -101,9 +140,9 @@ def main():
     
     # Wait for server to start
     time.sleep(2)
-    Logger.server_ready(public_url)
+    Logger.server_ready(ready_url)
     
-    # ── Graceful shutdown on SIGTERM ────────────────────────────────
+    # ── SIGTERM 优雅下线 ────────────────────────────────────────────
     def _handle_sigterm(signum, frame):
         """
         Railway (and Docker) send SIGTERM before killing the container.
@@ -124,7 +163,7 @@ def main():
             f"active call(s) to finish..."
         )
 
-        # Poll until calls drain or timeout
+        # 轮询等待活跃通话排空，超时则强制退出。
         deadline = time.monotonic() + DRAIN_TIMEOUT
         while server_module._active_calls > 0 and time.monotonic() < deadline:
             time.sleep(1)
@@ -142,14 +181,14 @@ def main():
 
     try:
         if phone_number:
-            # Outbound call mode
+            # 外呼模式：服务起来后，主动让 Twilio 发起拨号。
             Logger.call_initiating(phone_number)
             call_sid = make_outbound_call(phone_number)
             Logger.call_initiated(call_sid)
             logger.info("Waiting for call to connect... (Ctrl+C to end)")
         else:
-            # Server-only mode — wait for inbound calls
-            logger.info("Server-only mode — waiting for inbound calls (Ctrl+C to end)")
+            # 浏览器/纯服务模式：暴露网页入口，不主动外呼。
+            logger.info(f"Browser mode — open {ready_url} (Ctrl+C to end)")
 
         # Keep main thread alive
         while True:

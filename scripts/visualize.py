@@ -36,6 +36,13 @@ SPAN_LABELS: Dict[str, str] = {
 
 MARKER_STYLES: Dict[str, Tuple[str, str]] = {
     # name -> (color, short label)
+    # ASR 侧 marker：对应用户开口、TurnInfo、interim/final 的关键节点。
+    "user_audio_first_frame": ("#6C7A89", "User start"),
+    "flux_start_of_turn": ("#0B7285", "StartOfTurn"),
+    "asr_first_interim": ("#087F5B", "ASR first"),
+    "user_last_audio_frame": ("#6C7A89", "User end"),
+    "flux_end_of_turn": ("#A61E4D", "EndOfTurn"),
+    "asr_final_transcript": ("#C2255C", "ASR final"),
     "llm_first_token": ("#F5A623", "TTFT"),
     "tts_first_audio": ("#9B2FAE", "First audio"),
 }
@@ -227,12 +234,6 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
     all_ends = [s.get("end_ms", 0) for s in spans if s.get("end_ms")]
     x_range = max(all_ends) if all_ends else 1
 
-    # Check if markers are close together (need to fan out labels)
-    close = False
-    if len(sorted_markers) >= 2:
-        gap = abs(sorted_markers[1]["time_ms"] - sorted_markers[0]["time_ms"])
-        close = gap / max(x_range, 1) < 0.15
-
     for i, m in enumerate(sorted_markers):
         name = m["name"]
         t = m["time_ms"]
@@ -242,16 +243,18 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
 
         ax.axvline(x=t, color=color, linestyle="--", linewidth=1.2, alpha=0.7)
 
-        # When markers are close: first goes right-aligned, second left-aligned
-        # This fans the labels apart from each other
-        if close and i == 0:
-            ha, text = "right", f"{label}  +{t:.0f}ms  "
+        # marker 数量变多后，简单错层摆放，避免文本全部堆在一条线上。
+        y_offset = -0.42 - ((i % 3) * 0.16)
+        ha = "left" if i % 2 else "right"
+        text = f"{label}  +{t:.0f}ms"
+        if ha == "left":
+            text = "  " + text
         else:
-            ha, text = "left", f"  {label}  +{t:.0f}ms"
+            text = text + "  "
 
         ax.annotate(
             text,
-            xy=(t, -0.35),
+            xy=(t, y_offset),
             fontsize=7.5, color=color, fontweight="bold",
             ha=ha, va="bottom", clip_on=False,
         )
@@ -259,13 +262,31 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
     # ── Summary stats (right-aligned) ────────────────────────────────
     marker_map = {m["name"]: m["time_ms"] for m in markers}
     stats = []
+    # 这里直接把图上最关心的 4 个 ASR 指标算出来，避免每次手工心算。
+    if "flux_start_of_turn" in marker_map and "user_audio_first_frame" in marker_map:
+        stats.append(
+            f"open {marker_map['flux_start_of_turn'] - marker_map['user_audio_first_frame']:.0f}ms"
+        )
+    if "asr_first_interim" in marker_map and "user_audio_first_frame" in marker_map:
+        stats.append(
+            f"asr-first {marker_map['asr_first_interim'] - marker_map['user_audio_first_frame']:.0f}ms"
+        )
+    if "flux_end_of_turn" in marker_map and "user_last_audio_frame" in marker_map:
+        stats.append(
+            f"endpoint {marker_map['flux_end_of_turn'] - marker_map['user_last_audio_frame']:.0f}ms"
+        )
+    if "asr_final_transcript" in marker_map and "flux_start_of_turn" in marker_map:
+        stats.append(
+            f"asr-final {marker_map['asr_final_transcript'] - marker_map['flux_start_of_turn']:.0f}ms"
+        )
     if "llm_first_token" in marker_map:
         stats.append(f"TTFT {marker_map['llm_first_token']:.0f}ms")
     if "tts_first_audio" in marker_map:
         stats.append(f"E2E {marker_map['tts_first_audio']:.0f}ms")
 
-    if all_ends:
-        stats.append(f"total {max(all_ends):.0f}ms")
+    marker_times = [m["time_ms"] for m in markers]
+    if all_ends or marker_times:
+        stats.append(f"total {max(all_ends + marker_times):.0f}ms")
 
     if stats:
         ax.text(
@@ -283,7 +304,8 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
     ax.set_xlabel("ms from turn start", fontsize=8, color="#999")
     ax.xaxis.set_major_formatter(FuncFormatter(_fmt_ms))
     ax.invert_yaxis()
-    ax.set_xlim(left=0, right=3000)
+    x_max = max(all_ends + marker_times) if (all_ends or marker_times) else 3000
+    ax.set_xlim(left=0, right=max(3000, x_max * 1.15))
     ax.grid(axis="x", alpha=0.2, linestyle=":")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

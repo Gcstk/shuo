@@ -64,15 +64,35 @@ class Tracer:
         self._turn_counter = 0
 
     def begin_turn(self, transcript: str) -> int:
-        """Start a new turn, returns turn number."""
+        # 默认仍以“当前时刻”为 turn 起点，兼容旧调用方。
+        return self.begin_turn_at(transcript, start_time=time.monotonic())
+
+    def begin_turn_at(self, transcript: str, start_time: float) -> int:
+        """以显式时间起一个 turn，便于把 ASR 侧事件回填到同一时间轴。"""
         self._turn_counter += 1
         turn = Turn(
             turn_number=self._turn_counter,
             transcript=transcript,
-            t0=time.monotonic(),
+            t0=start_time,
         )
         self._turns[self._turn_counter] = turn
         return self._turn_counter
+
+    def has_turn(self, turn: int) -> bool:
+        return turn in self._turns
+
+    def get_turn_start(self, turn: int) -> Optional[float]:
+        t = self._turns.get(turn)
+        if not t:
+            return None
+        return t.t0
+
+    def update_turn_transcript(self, turn: int, transcript: str) -> None:
+        # Flux interim/final 到来后，允许把占位 transcript 更新成最终文本。
+        t = self._turns.get(turn)
+        if not t or not transcript:
+            return
+        t.transcript = transcript
 
     def begin(self, turn: int, name: str) -> None:
         """Begin a named span."""
@@ -101,6 +121,22 @@ class Tracer:
             return
         ms = (time.monotonic() - t.t0) * 1000
         t.markers.append(Marker(name=name, time_ms=ms))
+
+    def mark_at(self, turn: int, name: str, when: float) -> None:
+        """按给定 monotonic 时间落点，用于回填 Flux/ASR 事件。"""
+        t = self._turns.get(turn)
+        if not t:
+            return
+        ms = (when - t.t0) * 1000
+        if ms < 0:
+            ms = 0
+        t.markers.append(Marker(name=name, time_ms=ms))
+
+    def has_marker(self, turn: int, name: str) -> bool:
+        t = self._turns.get(turn)
+        if not t:
+            return False
+        return any(marker.name == name for marker in t.markers)
 
     def cancel_turn(self, turn: int) -> None:
         """Mark turn as cancelled and end all open spans at current time."""

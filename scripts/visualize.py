@@ -3,9 +3,9 @@
 Visualize shuo span traces as a Gantt chart.
 
 Usage:
-    python scripts/visualize.py /tmp/shuo/<call_id>.json
-    python scripts/visualize.py /tmp/shuo/<call_id>.json --save output.png
-    python scripts/visualize.py  # uses most recent trace in /tmp/shuo/
+    python scripts/visualize.py trace/<call_id>.json
+    python scripts/visualize.py trace/<call_id>.json --save output.png
+    python scripts/visualize.py  # uses most recent trace in <project>/trace/
 """
 
 import sys
@@ -17,6 +17,12 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.ticker import FuncFormatter
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from shuo.paths import TRACE_DIR
 
 # ── Theme ────────────────────────────────────────────────────────────
 
@@ -69,10 +75,9 @@ def fetch_trace(url: str) -> dict:
 
 
 def find_latest_trace() -> Optional[Path]:
-    trace_dir = Path("/tmp/shuo")
-    if not trace_dir.exists():
+    if not TRACE_DIR.exists():
         return None
-    traces = sorted(trace_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    traces = sorted(TRACE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     return traces[0] if traces else None
 
 
@@ -345,8 +350,8 @@ def main() -> None:
         if trace_path:
             print(f"Using latest trace: {trace_path}")
         else:
-            print("No trace files found in /tmp/shuo/")
-            print("Usage: python scripts/visualize.py /tmp/shuo/<call_id>.json")
+            print(f"No trace files found in {TRACE_DIR}/")
+            print("Usage: python scripts/visualize.py trace/<call_id>.json")
             print("       python scripts/visualize.py https://your-server/trace/latest")
             sys.exit(1)
         data = load_trace(trace_path)

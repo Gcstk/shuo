@@ -33,6 +33,7 @@ from openai import AsyncOpenAI
 from .conversation import run_conversation_over_twilio, run_conversation_with_transport
 from .services.twilio_client import make_outbound_call
 from .log import Logger, get_logger
+from .paths import TRACE_DIR
 from .transports import BrowserTransport
 
 logger = get_logger("shuo.server")
@@ -96,11 +97,10 @@ async def twiml():
 @app.get("/trace/latest")
 async def latest_trace():
     """返回最近一通电话的 trace（用于排查延迟/中断）。"""
-    trace_dir = Path("/tmp/shuo")
-    if not trace_dir.exists():
+    if not TRACE_DIR.exists():
         return JSONResponse({"error": "No traces found"}, status_code=404)
 
-    traces = sorted(trace_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    traces = sorted(TRACE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not traces:
         return JSONResponse({"error": "No traces found"}, status_code=404)
 

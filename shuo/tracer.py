@@ -2,7 +2,7 @@
 Lightweight span tracer for shuo.
 
 Records begin/end spans and point-in-time markers for each agent turn.
-Persists as JSON to /tmp/shuo/<call_id>.json on call end.
+Persists as JSON to <project>/trace/<call_id>.json on call end.
 
 Usage:
     tracer = Tracer()
@@ -10,7 +10,7 @@ Usage:
     tracer.begin(1, "llm")
     tracer.mark(1, "llm_first_token")
     tracer.end(1, "llm")
-    tracer.save("MZ8a3b1f")  # -> /tmp/shuo/MZ8a3b1f.json
+    tracer.save("MZ8a3b1f")  # -> <project>/trace/MZ8a3b1f.json
 """
 
 import json
@@ -20,10 +20,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field, asdict
 
 from .log import get_logger
+from .paths import TRACE_DIR
 
 logger = get_logger("shuo.tracer")
-
-TRACE_DIR = Path("/tmp/shuo")
 
 
 @dataclass
@@ -150,7 +149,7 @@ class Tracer:
                 span.end_ms = ms
 
     def save(self, call_id: str) -> Optional[Path]:
-        """Write trace data to /tmp/shuo/<call_id>.json."""
+        """Write trace data to <project>/trace/<call_id>.json."""
         if not self._turns:
             return None
 

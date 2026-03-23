@@ -8,6 +8,7 @@ Provides:
 """
 
 import logging
+import os
 import sys
 from typing import Optional
 
@@ -73,6 +74,14 @@ class ColorFormatter(logging.Formatter):
         ts = self.formatTime(record, "%H:%M:%S") + f".{ms:03d}"
         time_str = _c(C.DIM, ts)
         return time_str + " \u2502 " + record.getMessage()
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment flag."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def setup_logging(level: int = logging.INFO) -> None:

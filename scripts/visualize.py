@@ -87,6 +87,17 @@ MARKER_STYLES: Dict[str, Tuple[str, str]] = {
     "tts_first_audio": ("#9B2FAE", "First audio"),
 }
 
+TURN_COLORS: List[str] = [
+    "#0B7285",  # teal
+    "#C2255C",  # rose
+    "#5F3DC4",  # indigo
+    "#E67700",  # amber
+    "#2B8A3E",  # green
+    "#1971C2",  # blue
+    "#A61E4D",  # magenta
+    "#495057",  # graphite
+]
+
 CANCELLED_ALPHA = 0.45
 NORMAL_ALPHA = 0.92
 BAR_HEIGHT = 0.55
@@ -157,7 +168,7 @@ def render_trace(data: dict, save_path: Optional[str] = None) -> None:
 
     for idx, turn in enumerate(turns):
         ax = axes[idx, 0]
-        _render_turn(ax, turn)
+        _render_turn(ax, turn, idx)
 
     # ── Shared legend ────────────────────────────────────────────────
     legend_handles = []
@@ -188,12 +199,13 @@ def render_trace(data: dict, save_path: Optional[str] = None) -> None:
         plt.show()
 
 
-def _render_turn(ax: plt.Axes, turn: dict) -> None:
+def _render_turn(ax: plt.Axes, turn: dict, turn_idx: int) -> None:
     """Render a single turn on one subplot."""
     spans = turn.get("spans", [])
     markers = turn.get("markers", [])
     transcript = turn.get("transcript", "")
     cancelled = turn.get("cancelled", False)
+    turn_color = TURN_COLORS[turn_idx % len(TURN_COLORS)]
 
     # ── Title ────────────────────────────────────────────────────────
     display_text = transcript
@@ -201,10 +213,12 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
         display_text = display_text[:57] + "…"
 
     ax.set_title(
-        f"\"{display_text}\"",
+        f"T{turn_idx + 1}  \"{display_text}\"",
         fontsize=12,
         loc="left",
         pad=10,
+        color=turn_color,
+        fontweight="bold",
     )
 
     # ── Build span data ──────────────────────────────────────────────
@@ -277,10 +291,27 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
         name = m["name"]
         t = m["time_ms"]
         style = MARKER_STYLES.get(name)
-        color = style[0] if style else "#FF5722"
+        marker_color = style[0] if style else "#FF5722"
         label = style[1] if style else name
 
-        ax.axvline(x=t, color=color, linestyle="--", linewidth=1.2, alpha=0.7)
+        ax.axvline(
+            x=t,
+            color=turn_color,
+            linestyle=(0, (4, 3)),
+            linewidth=2.4,
+            alpha=0.82,
+            zorder=0,
+        )
+        ax.scatter(
+            [t],
+            [-0.18],
+            s=34,
+            color=marker_color,
+            edgecolors="white",
+            linewidths=0.6,
+            zorder=3,
+            clip_on=False,
+        )
 
         # marker 数量变多后，简单错层摆放，避免文本全部堆在一条线上。
         y_offset = -0.42 - ((i % 3) * 0.16)
@@ -294,7 +325,7 @@ def _render_turn(ax: plt.Axes, turn: dict) -> None:
         ax.annotate(
             text,
             xy=(t, y_offset),
-            fontsize=7.5, color=color, fontweight="bold",
+            fontsize=8.5, color=turn_color, fontweight="bold",
             ha=ha, va="bottom", clip_on=False,
         )
 

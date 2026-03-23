@@ -13,7 +13,7 @@ import numpy as np
 import websockets
 
 from ..audio import b64encode_bytes, mulaw_to_pcm16, pcm16_resample
-from ..log import ServiceLogger
+from ..log import ServiceLogger, env_flag
 from .flux import FluxTurnInfo
 
 log = ServiceLogger("Duplug")
@@ -59,6 +59,7 @@ class DuplugService:
 
         self._url = os.getenv("DUPLUG_WS_URL", "").strip()
         self._timeout = float(os.getenv("DUPLUG_WS_TIMEOUT", "10"))
+        self._debug_mode = env_flag("DEBUG_MODE")
 
         self._ws: Optional[Any] = None
         self._receive_task: Optional[asyncio.Task] = None
@@ -66,6 +67,7 @@ class DuplugService:
         self._encoding = "linear16"
         self._sample_rate = 16000
         self._session_id = f"shuo-{uuid.uuid4().hex}"
+        self._session_started_at = 0.0
         self._duration_queue: asyncio.Queue[float] = asyncio.Queue()
 
         self._turn_started = False
@@ -96,6 +98,7 @@ class DuplugService:
         self._current_turn_audio_sec = 0.0
         self._last_interim = ""
         self._session_id = f"shuo-{uuid.uuid4().hex}"
+        self._session_started_at = time.monotonic()
         self._duration_queue = asyncio.Queue()
 
         self._ws = await websockets.connect(self._url, open_timeout=self._timeout)
@@ -182,6 +185,8 @@ class DuplugService:
             self._running = False
 
     async def _handle_message(self, raw: str) -> None:
+        self._log_incoming_raw(raw)
+
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -196,6 +201,7 @@ class DuplugService:
         except asyncio.QueueEmpty:
             chunk_duration_sec = 0.0
 
+        self._log_turn_state(data, chunk_duration_sec)
         await self._process_turn_state(data.get("state") or {}, chunk_duration_sec)
 
     async def _process_turn_state(
@@ -313,4 +319,41 @@ class DuplugService:
                 audio_window_end=max(audio_window_end, 0.0),
                 received_at=time.monotonic(),
             )
+        )
+
+    def _elapsed_ms(self) -> float:
+        if self._session_started_at <= 0:
+            return 0.0
+        return (time.monotonic() - self._session_started_at) * 1000.0
+
+    def _log_incoming_raw(self, raw: str) -> None:
+        if not self._debug_mode:
+            return
+        log.info(f"recv +{self._elapsed_ms():.1f}ms raw={raw}")
+
+    def _log_turn_state(self, data: dict, chunk_duration_sec: float) -> None:
+        if not self._debug_mode:
+            return
+
+        state = data.get("state") or {}
+        label = (state.get("state") or "").strip().lower() or "unknown"
+        text = (state.get("text") or "").strip()
+        asr_segment = (state.get("asr_segment") or "").strip()
+        asr_buffer = (state.get("asr_buffer") or "").strip()
+
+        def _clip(value: str, limit: int = 80) -> str:
+            if len(value) <= limit:
+                return value
+            return value[: limit - 1] + "…"
+
+        log.info(
+            "recv "
+            f"+{self._elapsed_ms():.1f}ms "
+            f"state={label} "
+            f"chunk={chunk_duration_sec * 1000:.1f}ms "
+            f"turn_started={self._turn_started} "
+            f"turn_index={self._current_turn_index} "
+            f"text={_clip(text)!r} "
+            f"segment={_clip(asr_segment)!r} "
+            f"buffer={_clip(asr_buffer)!r}"
         )

@@ -33,14 +33,14 @@ from dotenv import load_dotenv
 
 from shuo.server import app
 from shuo.services.twilio_client import make_outbound_call
-from shuo.log import setup_logging, Logger, get_logger
+from shuo.log import setup_logging, Logger, get_logger, env_flag
 import shuo.server as server_module
 
 # Load environment variables
 load_dotenv()
 
 # Setup logging
-setup_logging()
+setup_logging(level=os.getenv("LOG_LEVEL", "DEBUG" if env_flag("DEBUG_MODE") else "INFO"))
 logger = get_logger("shuo")
 
 

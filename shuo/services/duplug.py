@@ -74,6 +74,7 @@ class DuplugService:
         self._turn_index = 0
         self._current_turn_index: Optional[int] = None
         self._current_turn_audio_sec = 0.0
+        self._last_speech_audio_sec = 0.0
         self._last_interim = ""
 
     @property
@@ -96,6 +97,7 @@ class DuplugService:
         self._turn_index = 0
         self._current_turn_index = None
         self._current_turn_audio_sec = 0.0
+        self._last_speech_audio_sec = 0.0
         self._last_interim = ""
         self._session_id = f"shuo-{uuid.uuid4().hex}"
         self._session_started_at = time.monotonic()
@@ -152,6 +154,7 @@ class DuplugService:
         self._turn_started = False
         self._current_turn_index = None
         self._current_turn_audio_sec = 0.0
+        self._last_speech_audio_sec = 0.0
         self._last_interim = ""
         log.disconnected()
 
@@ -225,7 +228,7 @@ class DuplugService:
             await self._emit_turn_info(
                 event="Update",
                 transcript=self._best_interim_text(result),
-                audio_window_end=self._current_turn_audio_sec,
+                audio_window_end=self._last_speech_audio_sec,
             )
 
     async def _handle_nonidle(self, result: dict, chunk_duration_sec: float) -> None:
@@ -235,47 +238,55 @@ class DuplugService:
             self._turn_index += 1
             self._current_turn_index = self._turn_index
             self._current_turn_audio_sec = chunk_duration_sec
+            self._last_speech_audio_sec = self._current_turn_audio_sec
             await self._emit_turn_info(
                 event="StartOfTurn",
                 transcript=transcript,
-                audio_window_end=self._current_turn_audio_sec,
+                audio_window_end=self._last_speech_audio_sec,
             )
             await self._on_start_of_turn()
         else:
             self._current_turn_audio_sec += chunk_duration_sec
+            self._last_speech_audio_sec = self._current_turn_audio_sec
             await self._emit_turn_info(
                 event="Update",
                 transcript=transcript,
-                audio_window_end=self._current_turn_audio_sec,
+                audio_window_end=self._last_speech_audio_sec,
             )
 
         await self._emit_interim(transcript)
 
     async def _handle_speak(self, result: dict, chunk_duration_sec: float) -> None:
         final_text = self._best_final_text(result)
+        internal_state = self._internal_state(result)
+        counts_as_speech = internal_state != "<|user_idle|>"
         if not self._turn_started:
             self._turn_started = True
             self._turn_index += 1
             self._current_turn_index = self._turn_index
-            self._current_turn_audio_sec = chunk_duration_sec
+            self._current_turn_audio_sec = chunk_duration_sec if counts_as_speech else 0.0
+            self._last_speech_audio_sec = self._current_turn_audio_sec
             await self._emit_turn_info(
                 event="StartOfTurn",
                 transcript=final_text,
-                audio_window_end=self._current_turn_audio_sec,
+                audio_window_end=self._last_speech_audio_sec,
             )
             await self._on_start_of_turn()
         else:
-            self._current_turn_audio_sec += chunk_duration_sec
+            if counts_as_speech:
+                self._current_turn_audio_sec += chunk_duration_sec
+                self._last_speech_audio_sec = self._current_turn_audio_sec
 
         await self._emit_turn_info(
             event="EndOfTurn",
             transcript=final_text,
-            audio_window_end=self._current_turn_audio_sec,
+            audio_window_end=self._last_speech_audio_sec,
         )
 
         self._turn_started = False
         self._current_turn_index = None
         self._current_turn_audio_sec = 0.0
+        self._last_speech_audio_sec = 0.0
         self._last_interim = ""
 
         await self._on_end_of_turn(final_text.strip())
@@ -292,6 +303,11 @@ class DuplugService:
             or self._best_interim_text(result)
             or self._last_interim
         )
+
+    @staticmethod
+    def _internal_state(result: dict) -> str:
+        debug = result.get("debug") or {}
+        return (debug.get("internal_state") or "").strip()
 
     async def _emit_interim(self, transcript: str) -> None:
         if not self._on_interim:

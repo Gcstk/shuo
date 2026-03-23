@@ -87,6 +87,13 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=...
 ```
 
+You can tune the TTS warm-connection pool with:
+
+```bash
+TTS_POOL_SIZE=1
+TTS_POOL_TTL=8.0
+```
+
 To use a remote SoulX-Duplug service instead of Deepgram Flux:
 
 ```bash

@@ -54,7 +54,9 @@ async def run_conversation_with_transport(transport: BaseTransport) -> None:
     tracer = Tracer()
 
     agent: Optional[Agent] = None
-    tts_pool = TTSPool(pool_size=1, ttl=8.0)
+    tts_pool_size = max(1, int(os.getenv("TTS_POOL_SIZE", "1")))
+    tts_pool_ttl = max(0.1, float(os.getenv("TTS_POOL_TTL", "8.0")))
+    tts_pool = TTSPool(pool_size=tts_pool_size, ttl=tts_pool_ttl)
     stream_sid: Optional[str] = None
     # Deepgram 的 turn_index 和本地 tracer turn_id 不是同一个概念，
     # 这里做一次映射，保证 ASR 和下游响应链路落在同一张图上。

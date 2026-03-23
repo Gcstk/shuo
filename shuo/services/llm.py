@@ -45,11 +45,11 @@ class LLMService:
         base_url = (
             os.getenv("LLM_BASE_URL")
             or os.getenv("VLLM_BASE_URL")
-            # or "http://192.168.129.25:8000/v1"
-            or "http://115.190.220.21:80/v1"
+            or "http://192.168.129.25:8001/v1"
+            # or "http://115.190.220.21:80/v1"
         )
-        # self._model = os.getenv("LLM_MODEL", "qwen3.5-4b")
-        self._model = os.getenv("LLM_MODEL", "qwen-4b-character")
+        self._model = os.getenv("LLM_MODEL", "qwen3.5-4b")
+        # self._model = os.getenv("LLM_MODEL", "qwen-4b-character")
 
         self._client = AsyncOpenAI(
             api_key=api_key,

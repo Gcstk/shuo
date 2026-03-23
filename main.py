@@ -26,6 +26,7 @@ import sys
 import signal
 import threading
 import time
+from typing import Optional
 
 import uvicorn
 from dotenv import load_dotenv
@@ -101,7 +102,10 @@ def check_environment(require_twilio: bool = False) -> bool:
 # Max time (seconds) to wait for active calls to finish before forced exit.
 DRAIN_TIMEOUT = int(os.getenv("DRAIN_TIMEOUT", "300"))  # 5 minutes default
 
-_uvicorn_server: uvicorn.Server = None
+_uvicorn_server: Optional[uvicorn.Server] = None
+_shutdown_event = threading.Event()
+_shutdown_signal: Optional[int] = None
+_force_shutdown = False
 
 
 def start_server(port: int) -> None:
@@ -117,8 +121,104 @@ def start_server(port: int) -> None:
     _uvicorn_server.run()
 
 
+def _signal_name(signum: Optional[int]) -> str:
+    """Return a stable signal name for logging."""
+    if signum is None:
+        return "UNKNOWN"
+    try:
+        return signal.Signals(signum).name
+    except ValueError:
+        return str(signum)
+
+
+def _stop_uvicorn(force: bool = False) -> None:
+    """Tell the background uvicorn server to stop."""
+    if not _uvicorn_server:
+        return
+
+    _uvicorn_server.should_exit = True
+    if force and hasattr(_uvicorn_server, "force_exit"):
+        _uvicorn_server.force_exit = True
+
+
+def _handle_shutdown_signal(signum, frame) -> None:
+    """
+    Record shutdown intent quickly inside the signal handler.
+
+    说明：
+    - 首次 SIGINT: 立即停服（本地开发的 Ctrl+C 语义）
+    - 首次 SIGTERM: 进入 graceful drain（容器/Procfile 管理器常见语义）
+    - 再次收到任意信号: 直接强制退出等待
+    """
+    del frame
+
+    global _shutdown_signal, _force_shutdown
+
+    signal_name = _signal_name(signum)
+    if _shutdown_event.is_set():
+        _force_shutdown = True
+        logger.warning(f"{signal_name} received again — forcing shutdown")
+        _stop_uvicorn(force=True)
+        return
+
+    _shutdown_signal = signum
+    _shutdown_event.set()
+
+    if signum == signal.SIGINT:
+        _force_shutdown = True
+        logger.info(f"{signal_name} received — stopping now")
+        _stop_uvicorn(force=True)
+    else:
+        logger.info(f"{signal_name} received — starting graceful drain")
+
+
+def _shutdown_server(server_thread: threading.Thread) -> None:
+    """Drain active calls if needed, then stop uvicorn."""
+    signal_name = _signal_name(_shutdown_signal)
+    server_module._draining = True
+
+    should_drain = (
+        _shutdown_signal == signal.SIGTERM
+        and not _force_shutdown
+        and DRAIN_TIMEOUT > 0
+    )
+
+    if should_drain and server_module._active_calls > 0:
+        logger.info(
+            f"Waiting up to {DRAIN_TIMEOUT}s for {server_module._active_calls} "
+            f"active call(s) to finish..."
+        )
+        deadline = time.monotonic() + DRAIN_TIMEOUT
+        while (
+            server_module._active_calls > 0
+            and time.monotonic() < deadline
+            and not _force_shutdown
+        ):
+            time.sleep(1)
+
+        remaining = server_module._active_calls
+        if _force_shutdown:
+            logger.warning("Shutdown forced before active calls drained")
+        elif remaining > 0:
+            logger.warning(
+                f"Drain timeout after {signal_name} — {remaining} call(s) still active"
+            )
+        else:
+            logger.info("All calls drained — shutting down cleanly")
+    elif server_module._active_calls > 0:
+        logger.info(
+            f"{signal_name} skipping drain with {server_module._active_calls} "
+            f"active call(s)"
+        )
+
+    _stop_uvicorn(force=_force_shutdown)
+    server_thread.join(timeout=5)
+
+
 def main():
     """程序入口：启动服务并可选发起外呼。"""
+    global _shutdown_signal, _force_shutdown
+
     phone_number = None
 
     if len(sys.argv) >= 2:
@@ -140,6 +240,9 @@ def main():
     # - 服务线程跑 uvicorn
     # - 主线程保留给信号处理与外呼控制
     Logger.server_starting(port)
+    _shutdown_event.clear()
+    _shutdown_signal = None
+    _force_shutdown = False
     server_thread = threading.Thread(
         target=start_server,
         args=(port,),
@@ -150,43 +253,8 @@ def main():
     # Wait for server to start
     time.sleep(2)
     Logger.server_ready(ready_url)
-    
-    # ── SIGTERM 优雅下线 ────────────────────────────────────────────
-    def _handle_sigterm(signum, frame):
-        """
-        Railway (and Docker) send SIGTERM before killing the container.
-        We stop accepting new calls and wait for active ones to finish.
-        """
-        logger.info("SIGTERM received — starting graceful drain")
-        server_module._draining = True
-
-        # If no active calls, exit immediately
-        if server_module._active_calls <= 0:
-            logger.info("No active calls — shutting down now")
-            if _uvicorn_server:
-                _uvicorn_server.should_exit = True
-            return
-
-        logger.info(
-            f"Waiting up to {DRAIN_TIMEOUT}s for {server_module._active_calls} "
-            f"active call(s) to finish..."
-        )
-
-        # 轮询等待活跃通话排空，超时则强制退出。
-        deadline = time.monotonic() + DRAIN_TIMEOUT
-        while server_module._active_calls > 0 and time.monotonic() < deadline:
-            time.sleep(1)
-
-        remaining = server_module._active_calls
-        if remaining > 0:
-            logger.warning(f"Drain timeout — {remaining} call(s) still active, forcing exit")
-        else:
-            logger.info("All calls drained — shutting down cleanly")
-
-        if _uvicorn_server:
-            _uvicorn_server.should_exit = True
-
-    signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
     try:
         if phone_number:
@@ -199,15 +267,15 @@ def main():
             # 浏览器/纯服务模式：暴露网页入口，不主动外呼。
             logger.info(f"Browser mode — open {ready_url} (Ctrl+C to end)")
 
-        # Keep main thread alive
-        while True:
-            time.sleep(1)
-            
-    except KeyboardInterrupt:
-        Logger.shutdown()
+        # 主线程只负责等待退出信号；真正关闭逻辑放到循环外统一处理。
+        while not _shutdown_event.wait(timeout=1):
+            pass
     except Exception as e:
         logger.error(f"Error: {e}")
         sys.exit(1)
+    finally:
+        _shutdown_server(server_thread)
+        Logger.shutdown()
 
 
 if __name__ == "__main__":

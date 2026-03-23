@@ -1,0 +1,701 @@
+{
+  "call_id": "browser-e329301addb3",
+  "turns": [
+    {
+      "turn": 1,
+      "transcript": "\u54ce\uff0c\u4f60\u597d\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1064.6875000093132,
+          "end_ms": 2298.687499947846
+        },
+        {
+          "name": "llm",
+          "start_ms": 2298.687499947846,
+          "end_ms": 3252.6874999748543
+        },
+        {
+          "name": "tts",
+          "start_ms": 3158.687499933876,
+          "end_ms": 3939.687500009313
+        },
+        {
+          "name": "player",
+          "start_ms": 3642.687499988824,
+          "end_ms": 3955.687499954365
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 10.750000015832484
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 1064.6875000093132
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 1064.6875000093132
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 3158.687499933876
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 3642.687499988824
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "transcript": "\u5443\uff0c\u4eca\u5929\u5929\u6c14\u600e\u4e48\u6837\uff1f",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 2002.6874999748543,
+          "end_ms": 3252.6874999748543
+        },
+        {
+          "name": "llm",
+          "start_ms": 3252.6874999748543,
+          "end_ms": 3533.6875000502914
+        },
+        {
+          "name": "tts",
+          "start_ms": 3346.6875000158325,
+          "end_ms": 4783.687500050291
+        },
+        {
+          "name": "player",
+          "start_ms": 4080.6875000707805,
+          "end_ms": 4814.687500009313
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 18.812500056810677
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 2002.6874999748543
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 2002.6874999748543
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 3346.6875000158325
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 4080.6875000707805
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "transcript": "\u6216\u8005\u6211\u9700\u8981\u5145\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 3080.687499954365,
+          "end_ms": 3080.687499954365
+        },
+        {
+          "name": "llm",
+          "start_ms": 3080.687499954365,
+          "end_ms": 3518.6874999199063
+        },
+        {
+          "name": "tts",
+          "start_ms": 3252.6874999748543,
+          "end_ms": 5440.687499940395
+        },
+        {
+          "name": "player",
+          "start_ms": 3986.687499913387,
+          "end_ms": 5455.687499954365
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 16.124999965541065
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 3080.687499954365
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 3080.687499954365
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 3252.6874999748543
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 3986.687499913387
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "transcript": "\u4e0d\u662f\u6211\u9700\u8981\u51fa\u95e8\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1845.687499968335,
+          "end_ms": 3673.687499947846
+        },
+        {
+          "name": "llm",
+          "start_ms": 3673.687499947846,
+          "end_ms": 4095.687499968335
+        },
+        {
+          "name": "tts",
+          "start_ms": 3798.687499947846,
+          "end_ms": 5986.687500029802
+        },
+        {
+          "name": "player",
+          "start_ms": 4580.687499954365,
+          "end_ms": 5986.687500029802
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 18.812500056810677
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 1845.687499968335
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 1845.687499968335
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 3798.687499947846
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 4580.687499954365
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "transcript": "\u53ef\u4ee5\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 314.6875000093132,
+          "end_ms": 314.6875000093132
+        },
+        {
+          "name": "llm",
+          "start_ms": 314.6875000093132,
+          "end_ms": 752.6874999748543
+        },
+        {
+          "name": "tts",
+          "start_ms": 502.6874999748543,
+          "end_ms": 2095.687499968335
+        },
+        {
+          "name": "player",
+          "start_ms": 1002.6874999748543,
+          "end_ms": 2111.6875000298023
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 5.374999949708581
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 314.6875000093132
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 314.6875000093132
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 502.6874999748543
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 1002.6874999748543
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "transcript": "\u6211\u5728\u6210\u90fd\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1143.6875000363216,
+          "end_ms": 2424.6874999953434
+        },
+        {
+          "name": "llm",
+          "start_ms": 2424.6874999953434,
+          "end_ms": 3237.6874999608845
+        },
+        {
+          "name": "tts",
+          "start_ms": 2643.6875000363216,
+          "end_ms": 6096.6875000158325
+        },
+        {
+          "name": "player",
+          "start_ms": 3456.6875000018626,
+          "end_ms": 6112.687499960884
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 13.437499990686774
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 1143.6875000363216
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 1143.6875000363216
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 2643.6875000363216
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 3456.6875000018626
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "transcript": "\u4f60\u8fd9\u4e5f\u592a\u6162\u4e86\u5427\u3002",
+      "cancelled": true,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1580.6874999543652,
+          "end_ms": 1580.6874999543652
+        },
+        {
+          "name": "llm",
+          "start_ms": 1580.6874999543652,
+          "end_ms": 2298.687499947846
+        },
+        {
+          "name": "tts",
+          "start_ms": 1752.6874999748543,
+          "end_ms": 3314.687500009313
+        },
+        {
+          "name": "player",
+          "start_ms": 2517.687499988824,
+          "end_ms": 3314.687500009313
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 18.812500056810677
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 1580.6874999543652
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 1580.6874999543652
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 1752.6874999748543
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 2517.687499988824
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "transcript": "\u522b\u8bf4\u4e86\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1080.6874999543652,
+          "end_ms": 1080.6874999543652
+        },
+        {
+          "name": "llm",
+          "start_ms": 1080.6874999543652,
+          "end_ms": 1393.6874999199063
+        },
+        {
+          "name": "tts",
+          "start_ms": 1252.6874999748543,
+          "end_ms": 2127.6874999748543
+        },
+        {
+          "name": "player",
+          "start_ms": 1658.687499933876,
+          "end_ms": 2143.6874999199063
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 10.750000015832484
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 986.687499913387
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 986.687499913387
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 1252.6874999748543
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 1658.687499933876
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "transcript": "\u7ed9\u6211\u4e00\u4e2a\u4e00\u767e\u5b57\u5de6\u53f3\u7684\u65c5\u6e38\u653b\u7565\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 6564.687500009313,
+          "end_ms": 6564.687500009313
+        },
+        {
+          "name": "llm",
+          "start_ms": 6564.687500009313,
+          "end_ms": 7517.687499988824
+        },
+        {
+          "name": "tts",
+          "start_ms": 6783.687499933876,
+          "end_ms": 11189.687500009313
+        },
+        {
+          "name": "player",
+          "start_ms": 7705.687499954365,
+          "end_ms": 11205.687499954365
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 48.375000013038516
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 6564.687500009313
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 6564.687500009313
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 6783.687499933876
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 7705.687499954365
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "transcript": "\u597d\u7684\u3002",
+      "cancelled": true,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 799.6874999953434,
+          "end_ms": 2877.6874999748543
+        },
+        {
+          "name": "llm",
+          "start_ms": 2877.6874999748543,
+          "end_ms": 2893.6874999199063
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 10.750000015832484
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 799.6874999953434
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 799.6874999953434
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "transcript": "\u597d\u7684\u597d\u7684\u3002",
+      "cancelled": true,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 2487.6874999608845,
+          "end_ms": 2487.6874999608845
+        },
+        {
+          "name": "llm",
+          "start_ms": 2487.6874999608845,
+          "end_ms": 2534.6874999813735
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 16.124999965541065
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 1518.6875000363216
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 1518.6875000363216
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "transcript": "\u55ef\uff0c\u522b\u8bf4\u4e86\u3002",
+      "cancelled": false,
+      "spans": [
+        {
+          "name": "tts_pool",
+          "start_ms": 1408.687499933876,
+          "end_ms": 1408.687499933876
+        },
+        {
+          "name": "llm",
+          "start_ms": 1408.687499933876,
+          "end_ms": 1783.687499933876
+        },
+        {
+          "name": "tts",
+          "start_ms": 1642.6874999888241,
+          "end_ms": 2595.687499968335
+        },
+        {
+          "name": "player",
+          "start_ms": 2142.687499988824,
+          "end_ms": 2611.6875000298023
+        }
+      ],
+      "markers": [
+        {
+          "name": "user_audio_first_frame",
+          "time_ms": 0.0
+        },
+        {
+          "name": "flux_start_of_turn",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "asr_first_interim",
+          "time_ms": 2.6874999748542905
+        },
+        {
+          "name": "user_last_audio_frame",
+          "time_ms": 10.750000015832484
+        },
+        {
+          "name": "flux_end_of_turn",
+          "time_ms": 845.687499968335
+        },
+        {
+          "name": "asr_final_transcript",
+          "time_ms": 845.687499968335
+        },
+        {
+          "name": "llm_first_token",
+          "time_ms": 1642.6874999888241
+        },
+        {
+          "name": "tts_first_audio",
+          "time_ms": 2142.687499988824
+        }
+      ]
+    }
+  ]
+}

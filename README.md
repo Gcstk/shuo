@@ -64,6 +64,8 @@ Requires Python 3.9+ plus:
 - your OpenAI-compatible LLM
 - a streaming TTS provider
 
+中文启动和 `soulx-duplug` 接入说明见 [docs/startup-and-soulx-duplug.md](/Users/geotk/workspace/audio/shuo/docs/startup-and-soulx-duplug.md)。
+
 ### Browser Mode
 
 ```bash

@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib import font_manager, rcParams
 from matplotlib.ticker import FuncFormatter
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -23,6 +24,39 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from shuo.paths import TRACE_DIR
+
+
+def configure_fonts() -> None:
+    """Prefer a CJK-capable font so Chinese transcripts render correctly."""
+    candidates = [
+        "Microsoft YaHei",
+        "SimHei",
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Heiti SC",
+        "Songti SC",
+        "Noto Sans CJK SC",
+        "Noto Sans CJK TC",
+        "Noto Sans CJK JP",
+        "Source Han Sans SC",
+        "Source Han Sans CN",
+        "WenQuanYi Zen Hei",
+        "Sarasa Gothic SC",
+        "Arial Unicode MS",
+    ]
+
+    available = {font.name for font in font_manager.fontManager.ttflist}
+    preferred = [name for name in candidates if name in available]
+
+    if preferred:
+        rcParams["font.sans-serif"] = preferred + list(rcParams.get("font.sans-serif", []))
+        rcParams["font.family"] = ["sans-serif"]
+
+    # Avoid minus-sign glyph issues when switching fonts.
+    rcParams["axes.unicode_minus"] = False
+
+
+configure_fonts()
 
 # ── Theme ────────────────────────────────────────────────────────────
 
